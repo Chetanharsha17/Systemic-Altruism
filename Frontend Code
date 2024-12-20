@@ -1,0 +1,4 @@
+# Install dependencies
+npx create-react-app rsims-frontend
+cd rsims-frontend
+npm install axios react-router-dom bootstrap

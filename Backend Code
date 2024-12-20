@@ -1,0 +1,114 @@
+# Install dependencies
+# pip install fastapi uvicorn sqlalchemy pydantic
+# pip install passlib bcrypt python-jose
+
+from fastapi import FastAPI, Depends, HTTPException
+from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+from typing import List, Optional
+
+# Secret key for JWT
+SECRET_KEY = "your_secret_key"
+ALGORITHM = "HS256"
+ACCESS_TOKEN_EXPIRE_MINUTES = 30
+
+# Password hashing
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# FastAPI app instance
+app = FastAPI()
+
+# OAuth2 Scheme
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/token")
+
+# Database simulation
+users_db = {
+    "admin@admin.com": {
+        "username": "admin",
+        "email": "admin@admin.com",
+        "hashed_password": pwd_context.hash("admin123"),
+        "role": "Admin",
+    },
+}
+
+resources = []
+initiatives = []
+
+# Models
+class User(BaseModel):
+    username: str
+    email: str
+    password: str
+    role: str
+
+class Resource(BaseModel):
+    id: int
+    title: str
+    description: str
+    type: str
+    quantity: int
+    availability: bool
+
+class Initiative(BaseModel):
+    id: int
+    name: str
+    description: str
+    startDate: str
+    endDate: str
+    status: str
+    impactMetrics: str
+
+class Token(BaseModel):
+    access_token: str
+    token_type: str
+
+# Helper functions
+
+def verify_password(plain_password, hashed_password):
+    return pwd_context.verify(plain_password, hashed_password)
+
+def get_password_hash(password):
+    return pwd_context.hash(password)
+
+def authenticate_user(email: str, password: str):
+    user = users_db.get(email)
+    if not user or not verify_password(password, user["hashed_password"]):
+        return False
+    return user
+
+def create_access_token(data: dict):
+    to_encode = data.copy()
+    to_encode.update({"exp": jwt.datetime.utcnow() + jwt.timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)})
+    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+
+# Routes
+
+@app.post("/token", response_model=Token)
+def login(form_data: OAuth2PasswordRequestForm = Depends()):
+    user = authenticate_user(form_data.username, form_data.password)
+    if not user:
+        raise HTTPException(status_code=401, detail="Invalid credentials")
+    access_token = create_access_token({"sub": user["email"]})
+    return {"access_token": access_token, "token_type": "bearer"}
+
+@app.post("/resources", response_model=Resource)
+def create_resource(resource: Resource, token: str = Depends(oauth2_scheme)):
+    # Authentication & role validation omitted for brevity
+    resources.append(resource)
+    return resource
+
+@app.get("/resources", response_model=List[Resource])
+def list_resources():
+    return resources
+
+@app.post("/initiatives", response_model=Initiative)
+def create_initiative(initiative: Initiative, token: str = Depends(oauth2_scheme)):
+    # Authentication & role validation omitted for brevity
+    initiatives.append(initiative)
+    return initiative
+
+@app.get("/initiatives", response_model=List[Initiative])
+def list_initiatives():
+    return initiatives
